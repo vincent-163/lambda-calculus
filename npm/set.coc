@@ -1,0 +1,14 @@
+Test=Type:* a:Type *
+
+# Conjunction operator
+conj=P:* Q:* X.* y.(.P .Q X) X
+conj_constructor=P:* Q:* p:P q:Q X:* y:(.P .Q X) (y p q)
+test_conj=(P:* Q:* p:P q:Q (Test (conj P Q) (conj_constructor P Q p q))) # pass
+
+
+# The Set theory
+Set: *
+Equal: (.Set .Set *)
+
+
+Set
