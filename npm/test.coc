@@ -1,0 +1,150 @@
+# type: *
+# norm: (a.* (.(.a a) (.a a)))
+NatT= T.* Succ.(.T T) Zero.T T
+NatSucc= x:NatT T:* Succ:(.T T) Zero:T (x T Succ (Succ Zero))
+Zero=T:* S:(.T T) Z:T Z
+One=(NatSucc Zero)
+# Type: NatT
+# norm: (a:* (b:(.a a) (a:a (b (b a)))))
+Two=T:* S:(.T T) Z:T (S (S Z))
+#Two=(NatSucc (NatSucc Zero))
+
+# 用 type 指令来检查b是否是a type；正确时*，错误时E
+# (Test NatT Exp) 为 E，(Test NatT Two) 为 *
+Test=Type:* a:Type *
+
+# type: (.(a.* (.(.a a) (.a a))) (.(a.* (.(.a a) (.a a))) (a.* (.(.a a) (.a a)))))
+# simplified: .NatT .NatT NatT
+# norm: (c:(a.* (.(.a a) (.a a))) (b:(a.* (.(.a a) (.a a))) (a:* (b (.a a) (c a)))))
+Exp=
+a: NatT
+b: NatT
+NatT2: *
+(b (.NatT2 NatT2) (a NatT2))
+
+# type: (.* *)
+# norm: (b:* (a.* (.(.b (.b a)) a)))
+pair_type=
+Inner:*
+T.*
+pair. (.Inner .Inner T)
+T
+
+# type: (a.* (.(.(a.* (.(.a a) (.a a))) (.(a.* (.(.a a) (.a a))) a)) a))
+# simplified type: pair_type NatT
+# norm: (a:* (a:(.(a.* (.(.a a) (.a a))) (.(a.* (.(.a a) (.a a))) a)) (a (a:* (b:(.a a) (a:a (b (b a))))) (a:* (b:(.a a) (a:a (b (b a))))))))
+pair_two=
+T:*
+pair: (.NatT .NatT T)
+(pair Two Two)
+
+
+# Type of trivial theorem; typechecks
+p_implies_p=T.* x.T T
+p_implies_p_proof=T:* x:T x
+
+# Slightly less trivial
+pq_implies_p=P.* Q.* x.P y.Q P
+pq_implies_p_proof=P:* Q:* x:P y:Q x
+
+# Conjunction operator
+# Value: (c:* (b:* (a.* (.(.c (.b a)) a))))
+conj=P:* Q:* X.* y.(.P .Q X) X
+# Value: (e:* (d:* (c.e (b.d (a.* (a.(.e (.d a)) (a c b)))))))
+conj_constructor=P:* Q:* p:P q:Q X:* y:(.P .Q X) (y p q)
+# Proof that conj_constructor is well defined
+
+# This has type  (c.* (b.* (.c (.b (a.* (.(.c (.b a)) a))))))
+#conj_constructor_correct=P:* Q:* p:P q:Q (conj_constructor P Q p q)
+# This has value (c:* (b:* (:c (:b (a.* (.(.c (.b a)) a))))))
+#conj_constructor_correct=P:* Q:* p:P q:Q (conj P Q)
+# In order to unify, must have four variables
+conj_constructor_correct=P:* Q:* p:P q:Q (Test (conj P Q) (conj_constructor P Q p q))
+
+# Conjunction implies first
+# Type:  *
+# Value: (c.* (b.* (.(a.* (.(.c (.b a)) a)) c)))
+conj_implies_first=P.* Q.* x.(conj P Q) P
+# Proof
+# Type:  (c.* (b.* (.(a.* (.(.c (.b a)) a)) c)))
+# Value: (c:* (b:* (a:(a.* (.(.c (.b a)) a)) (a c (a:c (:b a))))))
+conj_implies_first_proof=P:* Q:* x:(conj P Q) (x P (p:P q:Q p))
+
+# Sum operator
+sum=P:* Q:* X.* .(.P X) .(.Q X) x
+first_implies_sum=P.* Q.* x.P (sum P Q)
+# Type:  (c.* (b.* (.c (a.* (.(.c a) (.(.b a) a))))))
+# Value: (a:* (d:* (c:a (b:* (a:(.a b) (:(.d b) (a c)))))))
+first_implies_sum_proof=P:* Q:* first:P (X:* first_to_sum:(.P X) second_to_sum:(.Q X) (first_to_sum first))
+
+
+# Boolean algebra
+Bool=T.* X.T Y.T T
+True=T:* X:T Y:T X
+False=T:* X:T Y:T Y
+BoolNot=t:Bool T:* X:T Y:T (t T Y X)
+
+# How to define custom properties?
+# Such as MyProp, which holds for A but not B
+# We define axioms as function arguments, so we write out the type but not the value
+# Then we typecheck the theory for consistency
+mytheory=
+T:*
+A:T
+B:T
+MyProp:(.T *)
+AHasProp:(MyProp A)
+(Test (MyProp A) AHasProp)
+
+# Equality theory
+# Let's prove that 2 equals 2!
+equaltheory=
+Equal:(.NatT .NatT *)
+ZeroEqualZero:(Equal Zero Zero)
+SuccEqualSucc:a.NatT b.NatT .(Equal a b) (Equal (NatSucc a) (NatSucc b))
+# This succeeds: (Test (Equal Zero Zero) ZeroEqualZero)
+# This fails: (Test (Equal Two Zero) ZeroEqualZero)
+# This succeeds: (Test ((x:NatT (Equal x x)) Zero) ZeroEqualZero)
+proof_one=(SuccEqualSucc Zero Zero ZeroEqualZero)
+proof_two=(SuccEqualSucc One One proof_one)
+(Test (Equal Two Two) proof_two)
+
+# Logic not
+not=P:* T.* (.P T)
+
+# Full peano axioms!
+peano=
+Equal:(.NatT .NatT *)
+ZeroEqualZero:(Equal Zero Zero)
+SuccEqualSucc:a.NatT b.NatT .(Equal a b) (Equal (NatSucc a) (NatSucc b))
+ZeroNotEqualSucc:a.NatT b.NatT .(Equal a Zero) (not (Equal a (NatSucc b)))
+# This inductive is flawed and doesn't work: 
+# Inductive: P.(.NatT *) base_case.(P Zero) induct_case.(pred.NatT .(P pred) (P (NatSucc pred))) P
+
+# This false assumption proves anything
+# (Test (Equal Zero) (false (Equal Zero)))
+# false: P.* P
+
+# This works!
+Inductive: P.(.NatT *) base_case.(P Zero) induct_case.(pred.NatT .(P pred) (P (NatSucc pred))) x.NatT (P x)
+# TODO: This doesn't typecheck: (MyTest (x:NatT (Equal x x)) Zero) for MyTest: P.(.NatT *) P
+# This does: (Test (Equal Zero Zero) (MyTest (x:NatT (Equal x x)) Zero)) for MyTest: P.(.NatT *) x.NatT (P x)
+MyTest: P.(.NatT *) x.NatT (P x)
+# This does: (Test ( (x:NatT (Equal x x)) Zero) ZeroEqualZero)
+
+# TODO: Prove xEqualx: x.NatT (Equal x x)
+#  ZeroEqualZero (x:NatT (SuccEqualSucc x x))
+xEqualx= (Inductive
+    (x:NatT (Equal x x))
+    ZeroEqualZero
+    (pred:NatT prev_equal:(Equal pred pred) (SuccEqualSucc pred pred prev_equal))
+)
+(Test (Equal One One) (xEqualx One))
+
+
+
+
+
+#(Test (IsTrue True) TrueIsTrue)
+
+peano
