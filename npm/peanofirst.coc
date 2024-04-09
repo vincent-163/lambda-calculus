@@ -1,0 +1,63 @@
+# Forces typecheck
+Test=Type:* a:Type *
+# Logic not
+not=P:* T.* (.P T)
+
+xx=
+# The Peano axioms
+Nat:*
+Zero:Nat
+Succ:.Nat Nat
+Equal:(.Nat .Nat *)
+EqualRfl: x.Nat (Equal x x)
+EqualTrans: x.Nat y.Nat z.Nat .(Equal x y) .(Equal y z) (Equal x z)
+SuccInj:x.Nat y.Nat .(Equal (Succ x) (Succ y)) (Equal x y)
+SuccNeqZero:x.Nat (not (Equal (Succ x) Zero))
+Induction:P.(.Nat *) .(P Zero) .(n.Nat (P (Succ n))) n.Nat (P n)
+
+# For first order theory, plus and multiplication are added as axioms
+Plus:(.Nat .Nat Nat)
+PlusBase: n.Nat (Equal (Plus Zero n) n)
+PlusSucc: a.Nat n.Nat (Equal (Plus (Succ a) n) (Succ (Plus a n)))
+Mul:(.Nat .Nat Nat)
+MulBase: n.Nat (Equal (Mul Zero n) n)
+MulSucc: a.Nat n.Nat (Equal (Mul (Succ a) n) (Plus n (Mul (a n))))
+
+# Prove 1+1=2!
+One=(Succ Zero)
+Two=(Succ (Succ Zero))
+OnePlusOne=(Plus One One)
+
+x_1p1e0p2=(PlusSucc Zero One)
+#(Test (Equal (Plus One One) (Succ (Plus Zero One))) x_1p1e0p2)
+x_0p1e1=(PlusBase One)
+#(Test (Equal (Plus Zero One) One) x_0p1e1)
+x_s0p1e2=(EqualRfl (Plus Zero One))
+
+# the proof
+OnePlusOneEqualsTwo=(EqualTrans (Plus One One) (Succ (Plus Zero One)) Two x_1p1e0p2 x_0p1e1)
+#(Equal (Plus Zero One) One)
+x_0p1e1
+#(Test (Equal OnePlusOne Two) OnePlusOneEqualsTwo)
+
+# Symmetry of plus
+PlusSymType= (x.Nat y.Nat (Equal (Plus x y) (Plus y x)))
+# Step 1: x+0=0+x
+xp0ex= (x.Nat (Equal (Plus x Zero) (Plus Zero x)))
+# Proof by Induction
+xp0exProof=(Induction
+    (x:Nat (Equal (Plus x Zero) (Plus Zero x)))
+    (EqualRfl (Plus Zero Zero))
+    (pred:Nat prev:(Equal (Plus pred Zero) (Plus Zero pred))
+        # PlusSucc pred Zero gives Equal (Plus (Succ pred) Zero) (Plus pred (Succ Zero))
+        # PlusBase (Succ pred) gives Equal (Plus Zero (Succ pred)) (Succ pred)
+        # PlusBase pred gives Equal (Plus Zero pred) pred
+        # prev gives Equal (Plus pred Zero) (Plus Zero pred)
+        PlusBase (Succ pred)
+        (PlusSucc pred Zero)
+    )
+)
+#xp0e0pxProof
+#(EqualTrans (Plus One One) (Succ (Plus Zero One)) Two x_1p1e0p2)
+
+xx

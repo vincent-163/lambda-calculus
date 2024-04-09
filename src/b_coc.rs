@@ -1,125 +1,305 @@
-pub enum Term {
-    Var(usize), // Variable, represented by De Bruijn indices
-    Lam(Box<Term>, Box<Term>), // Lambda abstraction, with parameter type and body
-    App(Box<Term>, Box<Term>), // Application, with function and argument
-    Pi(Box<Term>, Box<Term>), // Type of functions, with parameter type and return type
-    Prop, // The type of all propositions
-    Set, // The type of all types
+use std::{ops::Deref, sync::Arc};
+
+#[repr(u8)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum TermType {
+    SET = 0,
+    VAR = 1,
+    LAM = 2,
+    FOR = 3,
+    APP = 4,
+    E = 255,
 }
 
-impl Term {
-    pub fn type_check(&self, context: &Vec<Term>) -> Result<Term, String> {
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub enum TermTree {
+    SET(),
+    VAR(usize), // DeBruijn index
+    LAM(Arc<TermTree>, Arc<TermTree>),
+    FOR(Arc<TermTree>, Arc<TermTree>),
+    APP(Arc<TermTree>, Arc<TermTree>),
+    ERR(String),
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct TermTreeLazyBody {
+    typ: Arc<TermTreeLazy>,
+    bod: Arc<TermTree>,
+    mode: Mode, 
+    ctx: Arc<Context>
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub enum TermTreeLazy {
+    SET(),
+    VAR(usize), // DeBruijn index
+    LAM(TermTreeLazyBody),
+    FOR(TermTreeLazyBody),
+    APP(Arc<TermTreeLazy>, Arc<TermTreeLazy>),
+    ERR(String),
+}
+
+impl std::fmt::Debug for TermTreeLazy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Term::Var(index) => context.get(*index).cloned().ok_or_else(|| "Variable out of scope".to_string()),
-            Term::Lam(param_type, body) => {
-                let mut extended_context = context.clone();
-                extended_context.push(*param_type.clone());
-                let body_type = body.type_check(&extended_context)?;
-                Ok(Term::Pi(param_type.clone(), Box::new(body_type)))
+            Self::SET() => f.debug_tuple("SET").finish(),
+            Self::VAR(arg0) => f.debug_tuple("VAR").field(arg0).finish(),
+            Self::LAM(arg0) => f.debug_tuple("LAM").field(arg0).finish(),
+            Self::FOR(arg0) => f.debug_tuple("FOR").field(arg0).finish(),
+            Self::APP(arg0, arg1) => f.debug_tuple("APP").field(arg0).field(arg1).finish(),
+            Self::ERR(arg0) => write!(f, "ERR: {}", arg0),
+        }
+    }
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub enum Context {
+    Tail,
+    Head { typ: Arc<TermTreeLazy>, bod: Arc<TermTreeLazy>, next: Arc<Context>, id: usize },
+}
+
+impl std::fmt::Debug for TermTree {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SET() => f.debug_tuple("SET").finish(),
+            Self::VAR(arg0) => f.debug_tuple("VAR").field(arg0).finish(),
+            Self::LAM(arg0, arg1) => f.debug_tuple("LAM").field(arg0).field(arg1).finish(),
+            Self::FOR(arg0, arg1) => f.debug_tuple("FOR").field(arg0).field(arg1).finish(),
+            Self::APP(arg0, arg1) => f.debug_tuple("APP").field(arg0).field(arg1).finish(),
+            Self::ERR(arg0) => write!(f, "ERR: {}", arg0),
+        }
+    }
+}
+
+impl std::fmt::Debug for Context {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            // Self::Tail => write!(f, "Tail"),
+            // Self::Head { typ, bod, next, id } => f.debug_struct("Head").field("typ", typ).field("bod", bod).field("next", next).field("id", id).finish(),
+            Self::Tail => writeln!(f, "Tail"),
+            Self::Head { typ, bod, next, id } => {
+                writeln!(f, "{:>4} {:?} {:?}", id-1, typ.quote(*id-1), bod.quote(*id))?; std::fmt::Debug::fmt(next, f)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum Mode {
+    Type,
+    Value,
+}
+
+impl Context {
+    pub fn get(&self, i: usize, mode: Mode) -> Option<Arc<TermTreeLazy>> {
+        match self {
+            Context::Tail => None,
+            Context::Head { typ, bod, next, id } => if i == 0 {
+                match mode {
+                    Mode::Type => Some(typ.clone()),
+                    Mode::Value => Some(bod.clone()),
+                }
+            } else {
+                (next.get(i-1, mode))
+            }
+        }
+    }
+
+    pub fn id(&self) -> usize {
+        match self {
+            Context::Tail => 0,
+            Context::Head { id, .. } => *id,
+        }
+    }
+
+    pub fn extend(self: &Arc<Self>, mut typ: Arc<TermTreeLazy>, bod: Arc<TermTreeLazy>) -> Arc<Context> {
+        Arc::new(Context::Head { typ, bod, next: self.clone(), id: self.id()+1 })
+    }
+}
+
+impl TermTreeLazyBody {
+    fn apply(&self, term: Arc<TermTreeLazy>) -> Arc<TermTreeLazy> {
+        self.bod.eval(self.mode, &self.ctx.extend(self.typ.clone(), term))
+    }
+}
+
+impl TermTreeLazy {
+    pub fn quote(&self, d: usize) -> Arc<TermTree> {
+        match self {
+            Self::SET() => Arc::new(TermTree::SET()),
+            Self::VAR(n) => Arc::new(TermTree::VAR(d-n-1)),
+            Self::LAM(body) => Arc::new(TermTree::LAM(body.typ.quote(d), body.apply(Arc::new(TermTreeLazy::VAR(d))).quote(d+1))),
+            Self::FOR(body) => Arc::new(TermTree::FOR(body.typ.quote(d), body.apply(Arc::new(TermTreeLazy::VAR(d))).quote(d+1))),
+            Self::APP(a, b) => Arc::new(TermTree::APP(a.quote(d), b.quote(d))),
+            Self::ERR(e) => Arc::new(TermTree::ERR(e.to_string())),
+        }
+    }
+}
+
+pub fn check(a: &Arc<TermTreeLazy>, b: &Arc<TermTreeLazy>, d: usize) -> bool {
+    match (Deref::deref(a), Deref::deref(b)) {
+        (TermTreeLazy::SET(), TermTreeLazy::SET()) => true,
+        (TermTreeLazy::VAR(x), TermTreeLazy::VAR(y)) => x == y,
+        (TermTreeLazy::LAM(a), TermTreeLazy::LAM(b)) =>
+            check(&a.typ, &b.typ, d) &&
+            check(&a.apply(Arc::new(TermTreeLazy::VAR(d))), &b.apply(Arc::new(TermTreeLazy::VAR(d))), d+1),
+        (TermTreeLazy::FOR(a), TermTreeLazy::FOR(b)) =>
+            check(&a.typ, &b.typ, d) &&
+            check(&a.apply(Arc::new(TermTreeLazy::VAR(d))), &b.apply(Arc::new(TermTreeLazy::VAR(d))), d+1),
+        (TermTreeLazy::APP(aa, ab), TermTreeLazy::APP(ba, bb)) =>
+            check(aa, ba, d) && check(ab, bb, d),
+        _ => false,
+    }
+}
+
+fn var_name(mut x: usize, s: &mut String)  {
+    loop {
+        s.push(('a' as u8 + (x%26) as u8) as char);
+        x /= 26;
+        if x == 0 { break }
+    }
+}
+
+impl TermTree {
+    pub fn compact(&self) -> String {
+        let mut s = String::new();
+        self.compact_inner(&mut s, 0);
+        s
+    }
+    fn compact_inner(&self, s: &mut String, d: usize) {
+        match self {
+            TermTree::SET() => s.push('#'),
+            TermTree::VAR(x) => { var_name(*x, s); s.push(';') },
+            TermTree::LAM(typ, bod) => { s.push('λ'); typ.compact_inner(s, d); bod.compact_inner(s, d+1) },
+            TermTree::FOR(typ, bod) => { s.push('∀'); typ.compact_inner(s, d); bod.compact_inner(s, d+1) },
+            TermTree::APP(fun, arg) => { s.push('%'); fun.compact_inner(s, d); arg.compact_inner(s, d) },
+            TermTree::ERR(_) => s.push('#'),
+        }
+    }
+    pub fn parse(s: &str) -> Self {
+        let mut x = s.chars();
+        Self::parse_chars(&mut x)
+    }
+    fn parse_chars(s: &mut std::str::Chars<'_>) -> Self {
+        match s.next() {
+            None => TermTree::ERR("Premature termination".to_owned()),
+            Some('#') => TermTree::SET(),
+            Some('λ') => {
+                let typ = Arc::new(Self::parse_chars(s));
+                let bod = Arc::new(Self::parse_chars(s));
+                TermTree::LAM(typ, bod)
             },
-            Term::App(func, arg) => {
-                let func_type = func.type_check(context)?;
-                match *func_type {
-                    Term::Pi(param_type, return_type) => {
-                        let arg_type = arg.type_check(context)?;
-                        if *param_type == arg_type {
-                            Ok(*return_type)
+            Some('∀') => {
+                let typ = Arc::new(Self::parse_chars(s));
+                let bod = Arc::new(Self::parse_chars(s));
+                TermTree::FOR(typ, bod)
+            },
+            Some('%') => {
+                let fun = Arc::new(Self::parse_chars(s));
+                let arg = Arc::new(Self::parse_chars(s));
+                TermTree::APP(fun, arg)
+            }
+            Some(x) if x >= 'a' && x <= 'z' => {
+                let mut ind: usize = (x as usize) - ('a' as usize);
+                let mut b: usize = 1;
+                loop {
+                    if let Some(x) = s.next() {
+                        if x >= 'a' && x <= 'z' {
+                            b = b * 26;
+                            ind += b * ((x as usize) - ('a' as usize));
+                        } else if x == ';' {
+                            break TermTree::VAR(ind)
                         } else {
-                            Err("Type mismatch in application".to_string())
+                            break TermTree::ERR("Invalid DeBruijn index notation, does not end at ;".to_owned())
+                        }
+                    } else {
+                        break TermTree::ERR("Premature termination".to_owned())
+                    }
+                }
+            },
+            _ => TermTree::ERR("unrecognized token".to_owned()),
+        }
+    }
+    pub fn eval(self: &Arc<Self>, mode: Mode, ctx: &Arc<Context>) -> Arc<TermTreeLazy> {
+        match Deref::deref(self) {
+            TermTree::SET() => match mode {
+                // Mode::Type => TermTree::ERR("SET does not have a type".to_owned()),
+                Mode::Type => Arc::new(TermTreeLazy::SET()),
+                Mode::Value => Arc::new(TermTreeLazy::SET()),
+            },
+            TermTree::VAR(n) => {
+                match ctx.get(*n, mode) {
+                    Some(x) => x.clone(),
+                    None => Arc::new(TermTreeLazy::ERR("DeBruijn index out of range".to_owned()))
+                }
+            },
+            TermTree::APP(fun, arg) => {
+                let argv = arg.eval(Mode::Value, ctx);
+                match mode {
+                    Mode::Type => {
+                        let funt = fun.eval(Mode::Type, ctx);
+                        if let TermTreeLazy::FOR(funt) = Deref::deref(&funt) {
+                            let argt = arg.eval(Mode::Type, ctx);
+                            if check(&funt.typ, &argt, ctx.id()) {
+                                if ctx.id() == 15 {
+                                    println!("APP fun {:?} arg {:?}: context {:?}, argt {:?}, result {:?}", fun, arg, ctx, argt.quote(ctx.id()), funt.apply(argt.clone()).quote(ctx.id()));
+                                }
+                                funt.apply(argv)
+                            } else {
+                                println!("Type mismatch for APP: fun {:?}, arg {:?}", fun, arg);
+                                println!("{:?}", ctx);
+                                println!("funt.typ: {:?}", funt.typ.quote(ctx.id()));
+                                println!("argt: {:?}", argt.quote(ctx.id()));
+                                Arc::new(TermTreeLazy::ERR(format!("Type mismatch for APP: fun {:?}, arg {:?}", fun, arg)))
+                            }
+                        } else {
+                            Arc::new(TermTreeLazy::ERR(format!("Left side of APP not a function: fun {:?}, arg {:?}", fun, arg)))
                         }
                     },
-                    _ => Err("Application of non-function".to_string()),
+                    Mode::Value => {
+                        let funv = fun.eval(Mode::Value, ctx);
+                        if let TermTreeLazy::LAM(funv) = Deref::deref(&funv) {
+                            let argt = arg.eval(Mode::Type, ctx);
+                            if check(&funv.typ, &argt, 0) {
+                                funv.apply(argv)
+                            } else {
+                                Arc::new(TermTreeLazy::ERR(format!("Type mismatch for APP: fun {:?}, arg {:?}", fun, arg)))
+                            }
+                            // bod.eval(Mode::Value, &ctx.extend(*typ, argv))
+                        } else {
+                            Arc::new(TermTreeLazy::APP(funv, argv))
+                        }
+                    }
                 }
             },
-            Term::Pi(param_type, return_type) => {
-                match (**param_type, return_type.type_check(context)?) {
-                    (Term::Prop, Term::Prop) | (Term::Set, Term::Prop) | (Term::Set, Term::Set) => Ok(Term::Set),
-                    _ => Err("Invalid Pi type formation".to_string()),
-                }
-            },
-            Term::Prop => Ok(Term::Set),
-            Term::Set => Ok(Term::Set),
-        }
-    }
-    
-    pub fn eval(term: Term) -> Term {
-        match term {
-            Term::Var(_) => term, // Variables are already in normal form.
-            Term::Lam(param_type, body) => {
-                // Lambda abstractions are values and thus already in normal form.
-                Term::Lam(param_type, body)
-            },
-            Term::App(func, arg) => {
-                let func_eval = eval(*func);
-                match func_eval {
-                    Term::Lam(_, body) => {
-                        // Beta reduction: replace the body of the lambda with the argument.
-                        eval(substitute(*body, 0, &arg))
+            TermTree::FOR(typ, bod) => {
+                match mode {
+                    Mode::Type => {
+                        let typt = typ.eval(Mode::Type, ctx);
+                        let typv = typ.eval(Mode::Value, ctx);
+                        let bodt = bod.eval(Mode::Type, &ctx.extend(Arc::new(TermTreeLazy::SET()), typv));
+                        if !check(&typt, &Arc::new(TermTreeLazy::SET()), 0) {
+                            Arc::new(TermTreeLazy::ERR(format!("In FOR, type is not of type Set: {:?}", typ)))
+                        } else if !check(&bodt, &Arc::new(TermTreeLazy::SET()), 0) {
+                            Arc::new(TermTreeLazy::ERR(format!("In FOR, body is not of type Set when given Set: {:?}", bod)))
+                        } else {
+                            Arc::new(TermTreeLazy::SET())
+                        }
                     },
-                    _ => Term::App(Box::new(func_eval), arg),
+                    Mode::Value => {
+                        let typv = typ.eval(Mode::Value, ctx);
+                        Arc::new(TermTreeLazy::FOR(TermTreeLazyBody { typ: typv, bod: bod.clone(), mode: Mode::Value, ctx: ctx.clone() }))
+                    }
                 }
             },
-            Term::Pi(param_type, return_type) => {
-                // Pi types are already in normal form.
-                Term::Pi(param_type, return_type)
-            },
-            Term::Prop => term, // Prop is already in normal form.
-            Term::Set => term,  // Set is already in normal form.
-        }
-    }
-    
-    
-pub fn eval(term: Term) -> Term {
-    match term {
-        Term::Var(_) => term, // Variables are already in normal form.
-        Term::Lam(param_type, body) => {
-            // Lambda abstractions are values and thus already in normal form.
-            Term::Lam(param_type, body)
-        },
-        Term::App(func, arg) => {
-            let func_eval = eval(*func);
-            match func_eval {
-                Term::Lam(_, body) => {
-                    // Beta reduction: replace the body of the lambda with the argument.
-                    eval(substitute(*body, 0, &arg))
-                },
-                _ => Term::App(Box::new(func_eval), arg),
-            }
-        },
-        Term::Pi(param_type, return_type) => {
-            // Pi types are already in normal form.
-            Term::Pi(param_type, return_type)
-        },
-        Term::Prop => term, // Prop is already in normal form.
-        Term::Set => term,  // Set is already in normal form.
-    }
-
-    pub fn substitute(term: Term, index: usize, value: &Term) -> Term {
-        match term {
-            Term::Var(i) => {
-                if i == index {
-                    value.clone() // Replace the variable with the value.
-                } else {
-                    Term::Var(i) // Different variable, no substitution.
+            TermTree::LAM(typ, bod) => {
+                let typv = typ.eval(Mode::Value, ctx);
+                match mode {
+                    Mode::Type => Arc::new(TermTreeLazy::FOR(TermTreeLazyBody { typ: typv, bod: bod.clone(), mode: Mode::Type, ctx: ctx.clone() })),
+                    Mode::Value => Arc::new(TermTreeLazy::LAM(TermTreeLazyBody { typ: typv, bod: bod.clone(), mode: Mode::Value, ctx: ctx.clone() })),
                 }
             },
-            Term::Lam(param_type, body) => {
-                // When entering a lambda, increase the de Bruijn index.
-                Term::Lam(param_type.clone(), Box::new(substitute(*body, index + 1, value)))
-            },
-            Term::App(func, arg) => {
-                // Substitute in both function and argument.
-                Term::App(Box::new(substitute(*func, index, value)), Box::new(substitute(*arg, index, value)))
-            },
-            Term::Pi(param_type, return_type) => {
-                // Substitute in both parameter type and return type.
-                Term::Pi(Box::new(substitute(*param_type, index, value)), Box::new(substitute(*return_type, index + 1, value)))
-            },
-            Term::Prop => term, // Prop has no variables to substitute.
-            Term::Set => term,  // Set has no variables to substitute.
+            TermTree::ERR(x) => Arc::new(TermTreeLazy::ERR(x.to_string())),
         }
     }
-    
-
-    
 }

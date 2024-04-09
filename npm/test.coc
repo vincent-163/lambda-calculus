@@ -129,7 +129,7 @@ ZeroNotEqualSucc:a.NatT b.NatT .(Equal a Zero) (not (Equal a (NatSucc b)))
 Inductive: P.(.NatT *) base_case.(P Zero) induct_case.(pred.NatT .(P pred) (P (NatSucc pred))) x.NatT (P x)
 # TODO: This doesn't typecheck: (MyTest (x:NatT (Equal x x)) Zero) for MyTest: P.(.NatT *) P
 # This does: (Test (Equal Zero Zero) (MyTest (x:NatT (Equal x x)) Zero)) for MyTest: P.(.NatT *) x.NatT (P x)
-MyTest: P.(.NatT *) x.NatT (P x)
+# MyTest: P.(.NatT *) x.NatT (P x)
 # This does: (Test ( (x:NatT (Equal x x)) Zero) ZeroEqualZero)
 
 # TODO: Prove xEqualx: x.NatT (Equal x x)
@@ -139,12 +139,29 @@ xEqualx= (Inductive
     ZeroEqualZero
     (pred:NatT prev_equal:(Equal pred pred) (SuccEqualSucc pred pred prev_equal))
 )
+One=(NatSucc Zero)
 (Test (Equal One One) (xEqualx One))
+#Inductive
 
 
-
-
-
-#(Test (IsTrue True) TrueIsTrue)
-
-peano
+# Another peano definition without NatT, but generalizes the Nat type
+# Can be converted to NatT version if necessary by filling the first arguments with NatT, Zero, NatSucc
+# (peano2 NatT Zero NatSucc) == peano
+peano2=
+Nat:*
+zero:Nat
+Succ:.Nat Nat
+Equal:(.Nat .Nat *)
+ZeroEqualZero:(Equal zero zero)
+SuccEqualSucc:a.Nat b.Nat .(Equal a b) (Equal (Succ a) (Succ b))
+ZeroNotEqualSucc:a.Nat b.Nat .(Equal a zero) (not (Equal a (Succ b)))
+Inductive: P.(.Nat *) base_case.(P zero) induct_case.(pred.Nat .(P pred) (P (Succ pred))) x.Nat (P x)
+xEqualx= (Inductive
+    (x:Nat (Equal x x))
+    ZeroEqualZero
+    (pred:Nat prev_equal:(Equal pred pred) (SuccEqualSucc pred pred prev_equal))
+)
+One=(Succ zero)
+(Test (Equal One One) (xEqualx One))
+#Equal
+#xEqualx

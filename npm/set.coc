@@ -8,7 +8,12 @@ test_conj=(P:* Q:* p:P q:Q (Test (conj P Q) (conj_constructor P Q p q))) # pass
 
 # The Set theory
 Set: *
-Equal: (.Set .Set *)
+# The Subset relation
+Subset: (.Set .Set *)
+
+
+# 1. Axiom of extensionality
+ax1: x.Set y.Set z.Set .(.(Subset z x) (Subset z y)) .(.(Subset z y) (Subset z x)) (Equal x y)
 
 
 Set

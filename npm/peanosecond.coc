@@ -1,0 +1,22 @@
+Test=Type:* a:Type *
+# Logic not
+not=P:* T.* (.P T)
+
+xx=
+# The Peano axioms
+Nat:*
+Zero:Nat
+Succ:.Nat Nat
+Equal:(.T:* .T .T *)
+EqualRfl: (.T:* x.T (Equal T x x))
+EqualTrans: (.T:* x.T y.T z.T .(Equal T x y) .(Equal T y z) (Equal T x z))
+SuccInj:x.Nat y.Nat .(Equal Nat (Succ x) (Succ y)) (Equal Nat x y)
+SuccNeqZero:x.Nat (not (Equal Nat (Succ x) Zero))
+Induction:P.(.Nat *) BaseCase.(P Zero) IndCase.(n.Nat (P (Succ n))) n.Nat (P n)
+
+# Induction equalities
+InductionBase:P.(.Nat *) BaseCase.(P Zero) IndCase.(n.Nat (P (Succ n))) (Equal (Induction P BaseCase IndCase Zero) BaseCase)
+
+SuccNeqZero
+
+xx
