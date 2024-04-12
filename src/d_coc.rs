@@ -67,7 +67,6 @@ pub enum TermTree {
     LAM(Arc<TermTree>, Arc<TermTree>),
     FOR(Arc<TermTree>, Arc<TermTree>),
     APP(Arc<TermTree>, Arc<TermTree>),
-    ERR(String),
 }
 struct TermTreeIter<'a>(Vec<&'a TermTree>);
 impl Iterator for TermTreeIter<'_> {
@@ -80,24 +79,12 @@ impl Iterator for TermTreeIter<'_> {
             Some(TermTree::LAM(x, y)) => { self.0.extend([&**y, &**x].iter()); Some(Token::LAM) },
             Some(TermTree::FOR(x, y)) => { self.0.extend([&**y, &**x].iter()); Some(Token::FOR) },
             Some(TermTree::APP(x, y)) => { self.0.extend([&**y, &**x].iter()); Some(Token::APP) },
-            Some(TermTree::ERR(_)) => None,
             None => None,
         }
     }
 }
 
 impl TermTree {
-    pub fn offset(&self, offset: usize) -> Arc<TermTree> {
-        match self {
-            TermTree::SET() => Arc::new(TermTree::SET()),
-            TermTree::VAR(x) => Arc::new(TermTree::VAR(x + offset)),
-            TermTree::LAM(a, b) => Arc::new(TermTree::LAM(a.offset(offset), b.offset(offset))),
-            TermTree::FOR(a, b) => Arc::new(TermTree::FOR(a.offset(offset), b.offset(offset))),
-            TermTree::APP(a, b) => Arc::new(TermTree::APP(a.offset(offset), b.offset(offset))),
-            TermTree::ERR(x) => Arc::new(TermTree::ERR(x.clone())),
-        }
-    }
-
     pub fn offset_ij(&self, i: usize, offset: usize) -> Arc<TermTree> {
         match self {
             TermTree::SET() => Arc::new(TermTree::SET()),
@@ -111,7 +98,6 @@ impl TermTree {
             TermTree::LAM(a, b) => Arc::new(TermTree::LAM(a.offset_ij(i, offset), b.offset_ij(i, offset))),
             TermTree::FOR(a, b) => Arc::new(TermTree::FOR(a.offset_ij(i, offset), b.offset_ij(i, offset))),
             TermTree::APP(a, b) => Arc::new(TermTree::APP(a.offset_ij(i, offset), b.offset_ij(i, offset))),
-            TermTree::ERR(x) => Arc::new(TermTree::ERR(x.clone())),
         }
     }
 
@@ -122,7 +108,6 @@ impl TermTree {
             TermTree::LAM(a, b) => Arc::new(TermTree::LAM(a.reverse(offset), b.reverse(offset+1))),
             TermTree::FOR(a, b) => Arc::new(TermTree::FOR(a.reverse(offset), b.reverse(offset+1))),
             TermTree::APP(a, b) => Arc::new(TermTree::APP(a.reverse(offset), b.reverse(offset))),
-            TermTree::ERR(x) => Arc::new(TermTree::ERR(x.clone())),
         }
     }
 
@@ -139,7 +124,6 @@ impl TermTree {
             TermTree::LAM(a, b) => Arc::new(TermTree::LAM(a.apply(data.clone(), absolute_offset), b.apply(data, absolute_offset))),
             TermTree::FOR(a, b) => Arc::new(TermTree::FOR(a.apply(data.clone(), absolute_offset), b.apply(data, absolute_offset))),
             TermTree::APP(a, b) => Arc::new(TermTree::APP(a.apply(data.clone(), absolute_offset), b.apply(data, absolute_offset))),
-            TermTree::ERR(x) => Arc::new(TermTree::ERR(x.clone())),
         }
     }
 
@@ -157,13 +141,13 @@ impl TermTree {
 #[derive(Debug, Clone)]
 enum TermParserState {
     LAMType,
-    LAMValue(Arc<TermTree>, Context),
+    LAMValue(Arc<TermTree>),
     FORType,
     FORValue(Arc<TermTree>, Context),
     APPFun,
     // type and body of left arg, both evaluated
     APPArg(Arc<TermTree>, Arc<TermTree>, Arc<TermTree>), // argtype, rettype, function body
-    Complete(Arc<TermTree>, Arc<TermTree>, Context),
+    Complete(Arc<TermTree>, Arc<TermTree>),
 }
 
 #[derive(Clone)]
@@ -216,17 +200,6 @@ impl Context {
             typ,
             i,
         })))
-    }
-    pub fn apply(&self, valtyp: Arc<TermTree>) -> Result<Context, String> {
-        match &self.0 {
-            None => return Err(format!("Apply with empty context")),
-            Some(ctx) => {
-                if ctx.typ != valtyp {
-                    return Err(format!("Type mismatch: expected {:?}, got {:?}", ctx.typ, valtyp));
-                }
-                Ok(ctx.prev.clone())
-            }
-        }
     }
 }
 
@@ -308,7 +281,6 @@ impl PartialTerm {
             Token::SET => TermParserState::Complete(
                 Arc::new(TermTree::SET()),
                 Arc::new(TermTree::SET()),
-                ctx.clone(),
             ),
             Token::VAR(n) => {
                 let y = ctx.id() - 1 - n;
@@ -319,7 +291,6 @@ impl PartialTerm {
                     Some(typ) => TermParserState::Complete(
                         typ,
                         Arc::new(TermTree::VAR(y)),
-                        ctx.clone(),
                     )
                 }
             },
@@ -335,8 +306,7 @@ impl PartialTerm {
         })));
         while self.reduce()? {};
         if let Some(x) = &self.0 {
-            if let TermParserState::Complete(typ, bod, ctx) = &x.state {
-                println!("COMPLETE: ctx={:?}, should be empty", ctx);
+            if let TermParserState::Complete(typ, bod) = &x.state {
                 println!("{:?}", typ);
                 let typ = typ.reverse(0);
                 let bod = bod.reverse(0);
@@ -354,7 +324,7 @@ impl PartialTerm {
     fn reduce(&mut self) -> Result<bool, String> {
         let Some(inner) = &self.0 else { return Ok(false); };
         let PartialTermInner {
-            state: TermParserState::Complete(typ, bod, top_ctx),
+            state: TermParserState::Complete(typ, bod),
             ctx: _ctx,
             prev,
             goal: _goal,
@@ -389,7 +359,7 @@ impl PartialTerm {
                     Arc::new(TermTree::APP(funbod.clone(), bod.clone()))
                 };
                 println!("APP success: expected typ {:?} cur typ {:?} funbod {:?} bod {:?} res {:?} restyp {:?}", argtyp, typ, funbod, bod, resbod, rettyp);
-                (TermParserState::Complete(rettyp.clone(), resbod, ctx.clone()), ctx.clone(), goal.clone())
+                (TermParserState::Complete(rettyp.clone(), resbod), ctx.clone(), goal.clone())
             },
             TermParserState::FORType => {
                 if let TermTree::SET() = &**typ {
@@ -404,7 +374,6 @@ impl PartialTerm {
                     (TermParserState::Complete(
                         Arc::new(TermTree::SET()),
                         Arc::new(TermTree::FOR(typbod.clone(), bod.clone())),
-                        prevctx.clone(),
                     ), prevctx.clone(), None)
                 } else {
                     return Err(format!("Right side of FOR not of type SET: {:?}", typ));
@@ -413,12 +382,12 @@ impl PartialTerm {
             TermParserState::LAMType => {
                 if let TermTree::SET() = &**typ {
                     // Goal: TODO
-                    (TermParserState::LAMValue(bod.clone(), ctx.clone()), ctx.extend(bod.clone()), None)
+                    (TermParserState::LAMValue(bod.clone()), ctx.extend(bod.clone()), None)
                 } else {
                     return Err(format!("Left side of APP not a function of type FOR: {:?}", typ));
                 }
             },
-            TermParserState::LAMValue(typbod, prevctx) => {
+            TermParserState::LAMValue(typbod) => {
                 // TODO: this type maybe not correct, we need to take out var0 in typ
                 // (x:* y:x y) : (a.* (.a a))
                 // λ#λa;a; : ∀#∀a;b;
@@ -427,7 +396,6 @@ impl PartialTerm {
                 (TermParserState::Complete(
                     Arc::new(TermTree::FOR(typbod.clone(), typ.clone())),
                     Arc::new(TermTree::LAM(typbod.clone(), bod.clone())),
-                    prevctx.clone(),
                 ), ctx.clone(), None)
             },
         };
