@@ -143,7 +143,7 @@ enum TermParserState {
     LAMType,
     LAMValue(Arc<TermTree>),
     FORType,
-    FORValue(Arc<TermTree>, Context),
+    FORValue(Arc<TermTree>),
     APPFun,
     // type and body of left arg, both evaluated
     APPArg(Arc<TermTree>, Arc<TermTree>, Arc<TermTree>), // argtype, rettype, function body
@@ -347,56 +347,50 @@ impl PartialTerm {
                 }
             },
             TermParserState::APPArg(argtyp, rettyp, funbod) => {
-                // let ctx = ctx.apply(typ.clone())?;
                 if argtyp != typ {
                     return Err(format!("APP type mismatch: expected {:?}, got {:?}", argtyp, typ));
                 }
                 let rettyp = rettyp.apply(bod.clone(), ctx.id());
                 let resbod = if let TermTree::LAM(_, funbod) = &**funbod {
-                    // TODO: How to do this apply?
+                    // TODO: is this correct?
                     funbod.apply(bod.clone(), ctx.id())
                 } else {
                     Arc::new(TermTree::APP(funbod.clone(), bod.clone()))
                 };
-                println!("APP success: expected typ {:?} cur typ {:?} funbod {:?} bod {:?} res {:?} restyp {:?}", argtyp, typ, funbod, bod, resbod, rettyp);
+                // println!("APP success: expected typ {:?} cur typ {:?} funbod {:?} bod {:?} res {:?} restyp {:?}", argtyp, typ, funbod, bod, resbod, rettyp);
                 (TermParserState::Complete(rettyp.clone(), resbod), ctx.clone(), goal.clone())
             },
             TermParserState::FORType => {
                 if let TermTree::SET() = &**typ {
-                    // NOT typ.clone()!
-                    (TermParserState::FORValue(bod.clone(), ctx.clone()), ctx.extend(bod.clone()), Some(Arc::new(TermTree::SET())))
+                    (TermParserState::FORValue(bod.clone()), ctx.extend(bod.clone()), Some(Arc::new(TermTree::SET())))
                 } else {
                     return Err(format!("Left side of FOR not of type SET: {:?}", typ));
                 }
             },
-            TermParserState::FORValue(typbod, prevctx) => {
+            TermParserState::FORValue(typbod) => {
                 if let TermTree::SET() = &**typ {
                     (TermParserState::Complete(
                         Arc::new(TermTree::SET()),
                         Arc::new(TermTree::FOR(typbod.clone(), bod.clone())),
-                    ), prevctx.clone(), None)
+                    ), Context(None), None)
                 } else {
                     return Err(format!("Right side of FOR not of type SET: {:?}", typ));
                 }
             },
             TermParserState::LAMType => {
                 if let TermTree::SET() = &**typ {
-                    // Goal: TODO
+                    // TODO: Goal support?
                     (TermParserState::LAMValue(bod.clone()), ctx.extend(bod.clone()), None)
                 } else {
                     return Err(format!("Left side of APP not a function of type FOR: {:?}", typ));
                 }
             },
             TermParserState::LAMValue(typbod) => {
-                // TODO: this type maybe not correct, we need to take out var0 in typ
-                // (x:* y:x y) : (a.* (.a a))
-                // λ#λa;a; : ∀#∀a;b;
-                // TODO: LAM?
-                println!("Lambda complete: type {:?} val type {:?} body {:?}", typbod.to_string(), typ.to_string(), bod.to_string());
+                // println!("Lambda complete: type {:?} val type {:?} body {:?}", typbod.to_string(), typ.to_string(), bod.to_string());
                 (TermParserState::Complete(
                     Arc::new(TermTree::FOR(typbod.clone(), typ.clone())),
                     Arc::new(TermTree::LAM(typbod.clone(), bod.clone())),
-                ), ctx.clone(), None)
+                ), Context(None), None)
             },
         };
         *self = PartialTerm(Some(Arc::new(PartialTermInner {
