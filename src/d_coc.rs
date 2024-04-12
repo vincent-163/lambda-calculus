@@ -358,7 +358,7 @@ impl PartialTerm {
                     Arc::new(TermTree::APP(funbod.clone(), bod.clone()))
                 };
                 // println!("APP success: expected typ {:?} cur typ {:?} funbod {:?} bod {:?} res {:?} restyp {:?}", argtyp, typ, funbod, bod, resbod, rettyp);
-                (TermParserState::Complete(rettyp.clone(), resbod), ctx.clone(), goal.clone())
+                (TermParserState::Complete(rettyp.clone(), resbod), Context(None), None)
             },
             TermParserState::FORType => {
                 if let TermTree::SET() = &**typ {
