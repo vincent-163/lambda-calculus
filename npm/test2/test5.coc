@@ -1,0 +1,27 @@
+# Forces typecheck
+Test=Type:* a:Type *
+# Logic not
+not=P:* T.* (.P T)
+
+xx=
+# The Peano axioms
+Nat:* # 0
+Zero:Nat # 1
+Succ:.Nat Nat # 2
+
+# The equivalence relation
+Equal:(T.* .T .T *)
+EqualNat=(Equal Nat)
+
+# The equivalence axioms
+#EqualRfl1: .T:* .x:T (Equal T x x)
+#EqualRfl2: .T1:* .T2:* .x:T1 .y:T1 .(Equal T1 x y) .z:(.T1 T2) (Equal T2 (z x) (z y))
+#Equal
+
+EqualNat
+
+xx
+
+#Equal:(.Nat .Nat *) # 3
+#EqualRfl: x.Nat (Equal x x) # 4
+#EqualTrans: x.Nat y.Nat z.Nat .(Equal x y) .(Equal y z) (Equal x z) # 5

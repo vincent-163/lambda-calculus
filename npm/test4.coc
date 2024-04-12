@@ -9,7 +9,7 @@ Nat:* # 0
 Zero:Nat # 1
 Succ:.Nat Nat # 2
 Equal:(.Nat .Nat *) # 3
-EqualRfl: x.Nat (Equal x x # 4)
+EqualRfl: x.Nat (Equal x x) # 4
 EqualTrans: x.Nat y.Nat z.Nat .(Equal x y) .(Equal y z) (Equal x z) # 5
 SuccInj:x.Nat y.Nat .(Equal (Succ x) (Succ y)) (Equal x y) # 6
 SuccNeqZero:x.Nat (not (Equal (Succ x) Zero)) # 7
@@ -24,43 +24,23 @@ MulBase: n.Nat (Equal (Mul Zero n) n) # 13
 
 # TODO: make MulSucc pass
 MulSucc: a.Nat n.Nat (Equal (Mul (Succ a) n) (Plus n (Mul a n)))
-MulSucc
 
 # Prove 1+1=2!
 One=(Succ Zero)
 Two=(Succ (Succ Zero))
 OnePlusOne=(Plus One One)
 
-x_1p1e0p2=(PlusSucc Zero One)
-#(Test (Equal (Plus One One) (Succ (Plus Zero One))) x_1p1e0p2)
+x_1p1es0p1=(PlusSucc Zero One)
+#(Test (Equal (Plus One One) (Succ (Plus Zero One))) x_1p1es0p1)
 x_0p1e1=(PlusBase One)
 #(Test (Equal (Plus Zero One) One) x_0p1e1)
 x_s0p1e2=(EqualRfl (Plus Zero One))
 
 # the proof
-#OnePlusOneEqualsTwo=(EqualTrans (Plus One One) (Succ (Plus Zero One)) Two x_1p1e0p2 x_0p1e1)
+OnePlusOneEqualsTwo=(EqualTrans (Plus One One) (Succ (Plus Zero One)) Two x_1p1es0p1 x_0p1e1)
 #(Equal (Plus Zero One) One)
 # x_0p1e1
 #(Test (Equal OnePlusOne Two) OnePlusOneEqualsTwo)
-
-# Symmetry of plus
-PlusSymType= (x.Nat y.Nat (Equal (Plus x y) (Plus y x)))
-# Step 1: x+0=0+x
-xp0ex= (x.Nat (Equal (Plus x Zero) (Plus Zero x)))
-# Proof by Induction
-xp0exProof=(Induction
-    (x:Nat (Equal (Plus x Zero) (Plus Zero x)))
-    (EqualRfl (Plus Zero Zero))
-    (pred:Nat prev:(Equal (Plus pred Zero) (Plus Zero pred))
-        # PlusSucc pred Zero gives Equal (Plus (Succ pred) Zero) (Plus pred (Succ Zero))
-        # PlusBase (Succ pred) gives Equal (Plus Zero (Succ pred)) (Succ pred)
-        # PlusBase pred gives Equal (Plus Zero pred) pred
-        # prev gives Equal (Plus pred Zero) (Plus Zero pred)
-        PlusBase (Succ pred)
-        (PlusSucc pred Zero)
-    )
-)
-#xp0e0pxProof
-#(EqualTrans (Plus One One) (Succ (Plus Zero One)) Two x_1p1e0p2)
-
+# (EqualTrans (Plus One One) (Succ (Plus Zero One)) Two x_1p1es0p1)
+x_1p1es0p1
 xx

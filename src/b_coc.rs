@@ -1,14 +1,12 @@
 use std::{ops::Deref, sync::Arc};
 
-#[repr(u8)]
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum TermType {
-    SET = 0,
-    VAR = 1,
-    LAM = 2,
-    FOR = 3,
-    APP = 4,
-    E = 255,
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Token {
+    SET,
+    VAR(usize),
+    LAM,
+    FOR,
+    APP,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -23,10 +21,10 @@ pub enum TermTree {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct TermTreeLazyBody {
-    typ: Arc<TermTreeLazy>,
-    bod: Arc<TermTree>,
-    mode: Mode, 
-    ctx: Arc<Context>
+    pub typ: Arc<TermTreeLazy>,
+    pub bod: Arc<TermTree>,
+    pub mode: Mode, 
+    pub ctx: Arc<Context>
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -94,13 +92,24 @@ impl Context {
     pub fn get(&self, i: usize, mode: Mode) -> Option<Arc<TermTreeLazy>> {
         match self {
             Context::Tail => None,
-            Context::Head { typ, bod, next, id } => if i == 0 {
+            Context::Head { typ, bod, next, .. } => if i == 0 {
                 match mode {
                     Mode::Type => Some(typ.clone()),
                     Mode::Value => Some(bod.clone()),
                 }
             } else {
                 (next.get(i-1, mode))
+            }
+        }
+    }
+
+    pub fn getboth(&self, i: usize) -> Option<(Arc<TermTreeLazy>, Arc<TermTreeLazy>)> {
+        match self {
+            Context::Tail => None,
+            Context::Head { typ, bod, next, .. } => if i == 0 {
+                Some((typ.clone(), bod.clone()))
+            } else {
+                next.getboth(i-1)
             }
         }
     }
@@ -118,7 +127,7 @@ impl Context {
 }
 
 impl TermTreeLazyBody {
-    fn apply(&self, term: Arc<TermTreeLazy>) -> Arc<TermTreeLazy> {
+    pub fn apply(&self, term: Arc<TermTreeLazy>) -> Arc<TermTreeLazy> {
         self.bod.eval(self.mode, &self.ctx.extend(self.typ.clone(), term))
     }
 }
@@ -234,16 +243,13 @@ impl TermTree {
                 }
             },
             TermTree::APP(fun, arg) => {
-                let argv = arg.eval(Mode::Value, ctx);
                 match mode {
                     Mode::Type => {
                         let funt = fun.eval(Mode::Type, ctx);
                         if let TermTreeLazy::FOR(funt) = Deref::deref(&funt) {
                             let argt = arg.eval(Mode::Type, ctx);
-                            if check(&funt.typ, &argt, ctx.id()) {
-                                if ctx.id() == 15 {
-                                    println!("APP fun {:?} arg {:?}: context {:?}, argt {:?}, result {:?}", fun, arg, ctx, argt.quote(ctx.id()), funt.apply(argt.clone()).quote(ctx.id()));
-                                }
+                            let argv = arg.eval(Mode::Value, ctx);
+                            if check(&funt.typ, &argt, 0) {
                                 funt.apply(argv)
                             } else {
                                 println!("Type mismatch for APP: fun {:?}, arg {:?}", fun, arg);
@@ -260,6 +266,7 @@ impl TermTree {
                         let funv = fun.eval(Mode::Value, ctx);
                         if let TermTreeLazy::LAM(funv) = Deref::deref(&funv) {
                             let argt = arg.eval(Mode::Type, ctx);
+                            let argv = arg.eval(Mode::Value, ctx);
                             if check(&funv.typ, &argt, 0) {
                                 funv.apply(argv)
                             } else {
@@ -267,6 +274,7 @@ impl TermTree {
                             }
                             // bod.eval(Mode::Value, &ctx.extend(*typ, argv))
                         } else {
+                            let argv = arg.eval(Mode::Value, ctx);
                             Arc::new(TermTreeLazy::APP(funv, argv))
                         }
                     }
@@ -300,6 +308,27 @@ impl TermTree {
                 }
             },
             TermTree::ERR(x) => Arc::new(TermTreeLazy::ERR(x.to_string())),
+        }
+    }
+
+    pub fn iter_tokens(&self) -> impl Iterator<Item = Token> + '_ {
+        TermTreeIter(vec![self])
+    }
+}
+
+struct TermTreeIter<'a>(Vec<&'a TermTree>);
+impl Iterator for TermTreeIter<'_> {
+    type Item = Token;
+    
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.0.pop() {
+            Some(TermTree::SET()) => Some(Token::SET),
+            Some(TermTree::VAR(x)) => Some(Token::VAR(*x)),
+            Some(TermTree::LAM(x, y)) => { self.0.extend([Deref::deref(y), x].iter()); Some(Token::LAM) },
+            Some(TermTree::FOR(x, y)) => { self.0.extend([Deref::deref(y), x].iter()); Some(Token::FOR) },
+            Some(TermTree::APP(x, y)) => { self.0.extend([Deref::deref(y), x].iter()); Some(Token::APP) },
+            Some(TermTree::ERR(_)) => None,
+            None => None,
         }
     }
 }

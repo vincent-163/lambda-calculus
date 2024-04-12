@@ -59,4 +59,10 @@ fn main() {
     // println!("{:?}", l(P(), l(P(), b(0))).type_check(&vec![]));
     // println!("{:?}", l(P(), l(P(), b(1))).type_check(&vec![]));
     // println!("{:?}", l(P(), l(P(), b(2))).type_check(&vec![]));
+
+    // test("λ#λ∀a;b;%%");
+
+    // https://github.com/VictorTaelin/calculus-of-constructions/issues/2
+    test("λ∀##λ∀#b;b;");
+    test("∀∀##∀∀#b;∀##");
 }

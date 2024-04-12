@@ -20,24 +20,23 @@ Inductive: P.(.Nat *) base_case.(P Zero) induct_case.(pred.Nat .(P pred) (P (Suc
 #Plus:(.Nat .Nat Nat)
 #PlusZeroEqualsZero: (Equal (Plus Zero Zero) Zero)
 # Define plus by induction
-Plus=(Inductive (x:Nat (.Nat Nat)) # inductive type Plus: forall x, there is a function y:Nat -> y:Nat
-    (y:Nat y) # base case: zero plus y equals y, we write "zero plus"
-    (x:Nat prev:(.Nat Nat) y:Nat (prev (Succ y))) # inductive case: succ x plus y equals x plus succ y
-)
+#Plus=(Inductive (x:Nat (.Nat Nat)) # inductive type Plus: forall x, there is a function y:Nat -> y:Nat
+#    (y:Nat y) # base case: zero plus y equals y, we write "zero plus"
+#    (x:Nat prev:(.Nat Nat) y:Nat (prev (Succ y))) # inductive case: succ x plus y equals x plus succ y
+#)
 test_plus=(Test Nat (Plus One Two)) # pass
 # This doesn't work, since induction does not allow us to reduce (Plus Zero Zero) to Zero
 # Induction only really works for predicates, cannot infer properties for inductions on functions
 
-xEqualx= (Inductive
-    (x:Nat (Equal x x))
-    ZeroEqualZero
-    (pred:Nat prev_equal:(Equal pred pred) (SuccEqualSucc pred pred prev_equal))
-)
-test1= (Test (x.Nat (Equal x x)) xEqualx) # pass
-One=(Succ Zero)
-Two=(Succ One)
-test2= (Test (Equal One One) (xEqualx One)) # pass
-Plus
+#xEqualx= (Inductive
+#    (x:Nat (Equal x x))
+#    ZeroEqualZero
+#    (pred:Nat prev_equal:(Equal pred pred) (SuccEqualSucc pred pred prev_equal))
+#)
+#test1= (Test (x.Nat (Equal x x)) xEqualx) # pass
+#One=(Succ Zero)
+#Two=(Succ One)
+#test2= (Test (Equal One One) (xEqualx One)) # pass
 
 # Inductive
 # type:  (a.* (e.a (d.(.a a) (c.(.a (.a *)) (.(c e e) (.(b.a (a.a (.(c b a) (c (d b) (d a))))) (.(b.a (a.a (.(c b e) (* (c b (d a)))))) (.(b.(.a *) (.(b e) (.(a.a (.(b a) (b (d a)))) (a.a (b a))))) (

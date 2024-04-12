@@ -10,3 +10,15 @@ edition = "2021"
 [[bin]]
 name = "a_lambda_main"
 path = "src/a_lambda_main.rs"
+
+[[bin]]
+name = "b_coc_main"
+path = "src/b_coc_main.rs"
+
+[[bin]]
+name = "c_coc_main"
+path = "src/c_coc_main.rs"
+
+[[bin]]
+name = "d_coc_main"
+path = "src/d_coc_main.rs"
