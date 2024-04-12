@@ -36,5 +36,6 @@ fn main() {
     // test("∀∀##∀∀#b;∀##");
     // test("λ#λa;a;");
     // test("λ#λa;λ∀b;c;λ∀#∀a;∀b;#%a;d;");
+    // test("λ##");
     test(proof);
 }
